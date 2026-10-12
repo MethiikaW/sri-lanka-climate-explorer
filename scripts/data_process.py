@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy import stats
-import itertools
+from itertools import combinations
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 FIG_DIR = Path(__file__).resolve().parent.parent / "outputs" / "figures"
@@ -153,4 +153,37 @@ city_mean_cis = pd.DataFrame(rows)
 
 city_mean_cis.to_csv(DATA_DIR / "city_mean_cis.csv", index=False)
 
-print(list(itertools.combinations(temp_summary.columns, 2)))
+
+
+paired_rows = []
+
+for variable, table in [("temperature", temp_summary), ("rainfall", rainfall_summary)]:
+    pairs = list(combinations(table.columns, 2))
+    n_test = len(pairs)
+
+    for city1, city2 in pairs:
+        a = table[city1]
+        b = table[city2]
+
+        t_stat, p_value = stats.ttest_rel(a, b)
+
+        diff = a - b
+        mean_diff , ci_low, ci_high, _  = mean_ci(diff)
+
+        paired_rows.append({
+            "variable": variable,  
+            "city_a": city1,
+            "city_b": city2,
+            "mean_diff": mean_diff,
+            "ci_low": ci_low,
+            "ci_high": ci_high,
+            "t_stat": t_stat,
+            "p_value": p_value,
+            "p_corrected": min(p_value * n_test, 1.0)  # Bonferroni correction
+        })
+
+paired_tests = pd.DataFrame(paired_rows)
+print(paired_tests)
+paired_tests.to_csv(DATA_DIR / "paired_tests.csv", index=False)
+
+
