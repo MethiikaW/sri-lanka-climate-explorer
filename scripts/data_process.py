@@ -1,6 +1,8 @@
 import pandas as pd
 from pathlib import Path
 import matplotlib.pyplot as plt
+from scipy import stats
+import itertools
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed"
 FIG_DIR = Path(__file__).resolve().parent.parent / "outputs" / "figures"
@@ -55,7 +57,7 @@ ax.grid(True, alpha=0.3)
 # 5. Render and save
 plt.tight_layout()
 plt.savefig(FIG_DIR / "rainfall_seasonality.png", dpi=150)
-plt.show()
+#plt.show()
 
 thresholds = {}
 
@@ -89,7 +91,7 @@ ax.legend(title="City")
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig(FIG_DIR / "extreme_heat_trend.png", dpi=150)
-plt.show()
+#plt.show()
 
 rain_wide = extreme_counts.pivot(index="year", columns="city", values="is_extreme_rain")
 
@@ -104,7 +106,51 @@ ax.legend(title="City")
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
 plt.savefig(FIG_DIR / "extreme_rain_trend.png", dpi=150)
-plt.show()
+#plt.show()
 
 
 extreme_counts.to_csv(DATA_DIR / "extreme_day_counts.csv", index=False)
+
+yearly_summary = df.groupby(["city", "year"]).agg({
+    "temperature_2m_mean": "mean",
+    "precipitation_sum": "sum"
+    
+}).reset_index()
+
+yearly_summary.to_csv(DATA_DIR / "yearly_summary.csv")
+
+rainfall_summary = yearly_summary.pivot(index="year", columns="city", values="precipitation_sum")
+
+temp_summary = yearly_summary.pivot(index="year", columns="city", values="temperature_2m_mean")
+
+print(rainfall_summary)
+print(temp_summary)
+
+def mean_ci(series, confidence=0.95):
+    values = series.dropna()
+    n = len(values)
+    mean = values.mean()
+    se = stats.sem(values)
+    crit = stats.t.ppf(1-(1 - confidence)/2, df= n-1)
+    half_width = crit * se
+    return mean, mean - half_width, mean + half_width, half_width
+
+rows = []
+
+for variable, table in [("temperature_2m_mean", temp_summary), ("precipitation_sum", rainfall_summary)]:
+    for city in table.columns:
+        mean, lower, upper, half_width = mean_ci(table[city])
+        rows.append({
+            "variable": variable,
+            "city": city,
+            "mean": mean,
+            "ci_low": lower,
+            "ci_high": upper,
+            "half_width": half_width
+        })
+
+city_mean_cis = pd.DataFrame(rows)
+
+city_mean_cis.to_csv(DATA_DIR / "city_mean_cis.csv", index=False)
+
+print(list(itertools.combinations(temp_summary.columns, 2)))
